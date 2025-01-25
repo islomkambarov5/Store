@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from rest_framework.serializers import CurrentUserDefault, HiddenField
 from django.contrib.auth.hashers import make_password
 from .models import *
 
@@ -13,7 +14,7 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = CustomUser
-        fields = ['username', 'email', 'password', 'telegram_id']
+        fields = ['username', 'first_name', 'last_name', "password", 'email', 'telegram_id']
 
     def create(self, validated_data):
         validated_data['password'] = make_password(validated_data['password'])
@@ -28,6 +29,14 @@ class PasswordChangeSerializer(serializers.Serializer):
 
 
 class ProductSerializer(serializers.ModelSerializer):
+    creator = HiddenField(default=CurrentUserDefault())
+    price = serializers.IntegerField()
+
     class Meta:
         model = Product
-        fields = '__all__'
+        fields = ['name', 'description', 'price', 'quantity', 'category', 'creator']
+
+    def validate_price(self, value):
+        if value <= 0:
+            raise serializers.ValidationError("Price must be a positive integer.")
+        return value

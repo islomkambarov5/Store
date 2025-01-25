@@ -2,6 +2,7 @@ from django.shortcuts import render
 from .models import Product, CustomUser
 from rest_framework import generics, permissions
 from .serializers import *
+from .permissions import *
 from django.contrib.auth import authenticate, login
 from rest_framework.response import Response
 from rest_framework import status
@@ -19,9 +20,9 @@ class LogInView(generics.GenericAPIView):
             username = serializer.validated_data['username']
             password = serializer.validated_data['password']
 
-            user = CustomUser.objects.get(username=username, password=password)
+            user = authenticate(request, username=username, password=password)
 
-            if user is not None and user.is_active:
+            if user is not None and bool(user.is_active or user.is_admin or user.is_staff or user.is_superuser):
                 refresh = RefreshToken.for_user(user)
                 login(request, user)
                 return Response({"detail": "Login successful.",
@@ -30,7 +31,6 @@ class LogInView(generics.GenericAPIView):
                                  }, status=status.HTTP_200_OK)
             elif user is not None and not user.is_active:
                 return Response({"detail": "User is not active."}, status=status.HTTP_401_UNAUTHORIZED)
-            print(user)
             return Response({"detail": "Invalid credentials."}, status=status.HTTP_401_UNAUTHORIZED)
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -53,12 +53,6 @@ class RegisterView(generics.GenericAPIView):
         return Response({"detail": "Please enter your registration details."})
 
 
-class ProductList(generics.ListAPIView):
-    queryset = Product.objects.all()
-    serializer_class = ProductSerializer
-    permission_classes = [permissions.IsAuthenticated]
-
-
 @permission_classes([permissions.IsAuthenticated])
 class UserLogoutApiView(generics.RetrieveAPIView):
     def get(self, *args, **kwargs):
@@ -77,14 +71,42 @@ class PasswordChangeApiView(generics.GenericAPIView):
         data = request.data
         serializer = PasswordChangeSerializer(data=data)
         if serializer.is_valid():
-            print(1)
             user = request.user
             if user.check_password(serializer.data.get('old_password')):
-                print(2)
                 user.set_password(serializer.data.get('new_password'))
                 user.save()
                 update_session_auth_hash(request, user)
-                print(3)
                 return Response({'message': 'Password changed successfully.'}, status=status.HTTP_200_OK)
             return Response({'error': 'Incorrect old password.'}, status=status.HTTP_400_BAD_REQUEST)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@permission_classes([IsActivated])
+class ProductList(generics.GenericAPIView):
+    serializer_class = ProductSerializer
+
+    def get(self, *args, **kwargs):
+        products = Product.objects.all()
+        product_list = []
+
+        for product in products:
+            product_list.append({
+                'id': product.id,
+                'name': product.name,
+                'description': product.description,
+                'price': product.price,
+                'creator': product.creator,
+                'category': product.category,
+                'quantity': product.quantity,
+            })
+
+        return Response({'products': product_list})
+
+    def post(self, request, *args, **kwargs):
+        data = request.data
+        serializer = ProductSerializer(data=data, context={'request': request})
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        else:
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
