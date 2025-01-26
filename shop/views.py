@@ -86,21 +86,27 @@ class ProductList(generics.GenericAPIView):
     serializer_class = ProductSerializer
 
     def get(self, *args, **kwargs):
+        # Fetch all products
         products = Product.objects.all()
-        product_list = []
+        host_domain = self.request.get_host()
 
+        # Prepare the list of products manually
+        product_list = []
         for product in products:
             product_list.append({
                 'id': product.id,
                 'name': product.name,
                 'description': product.description,
                 'price': product.price,
-                'creator': product.creator,
-                'category': product.category,
+                'creator': product.creator.username if product.creator else None,  # Assuming creator is a User model
+                'category': product.category.name if product.category else None,  # Assuming category is a related model
                 'quantity': product.quantity,
+                'url': f"http://{host_domain}{product.get_absolute_url()}"
             })
 
-        return Response({'products': product_list})
+        # Return the response with the product list
+        context = {'products': product_list}
+        return Response(context)
 
     def post(self, request, *args, **kwargs):
         data = request.data
@@ -110,3 +116,12 @@ class ProductList(generics.GenericAPIView):
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         else:
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@permission_classes([IsActivated, IsOwnerOrReadOnly])
+class ProductDetail(generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = ProductSerializer
+    queryset = Product.objects.all()
+    lookup_field = "slug"
+
+

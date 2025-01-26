@@ -3,8 +3,9 @@ from django.contrib.auth.models import AbstractUser
 from django.template.defaultfilters import slugify
 import requests
 
-
 # Create your models here.
+from django.urls import reverse
+
 
 def send_message(telegram_id, message):
     url = f"https://api.telegram.org/bot6585553255:AAGmt0QI7ag-J2if0FiYTeg4a1aau5UPMzg/sendMessage"
@@ -49,6 +50,9 @@ class CustomUser(AbstractUser):
         if not is_new and self.role == self.Roles.ADMIN:
             self.is_admin = True
 
+        if not self.is_active and self.is_superuser or self.is_admin or self.is_staff:
+            self.is_active = True
+
         # Call the parent class's save method to persist the object
         super().save(*args, **kwargs)
 
@@ -85,11 +89,14 @@ class Product(models.Model):
     creator = models.ForeignKey(CustomUser, on_delete=models.CASCADE, verbose_name='Salesman')
 
     def save(
-        self, force_insert=False, force_update=False, using=None, update_fields=None
+            self, force_insert=False, force_update=False, using=None, update_fields=None
     ):
         if not self.slug:
             self.slug = slugify(f"{self.name}-{self.creator.username}")
         super().save(force_insert, force_update, using, update_fields)
+
+    def get_absolute_url(self):
+        return reverse('product_detail', kwargs={'slug': self.slug})
 
     def __str__(self):
         return self.name
